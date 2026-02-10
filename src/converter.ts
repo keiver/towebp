@@ -201,7 +201,6 @@ export class ImageConverter {
   }
 
   async convertImage(inputPath: string, outputPath: string): Promise<FileConversionResult> {
-    // Bug fix #2: Declare tempOutput before try so it's accessible in catch
     let tempOutput: string | undefined;
 
     try {
@@ -261,7 +260,6 @@ export class ImageConverter {
 
       return { success: true, skipped: false };
     } catch (err) {
-      // Bug fix #2: Guard with if (tempOutput) before cleanup
       if (tempOutput) {
         try {
           await fs.unlink(tempOutput);
@@ -279,7 +277,6 @@ export class ImageConverter {
     }
   }
 
-  // Bug fix #1: Accept task descriptors, create promises lazily inside the batch loop
   private async processInBatches(tasks: ConversionTask[]): Promise<FileConversionResult[]> {
     const results: FileConversionResult[] = [];
 

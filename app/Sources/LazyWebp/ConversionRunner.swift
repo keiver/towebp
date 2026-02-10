@@ -11,6 +11,7 @@ struct LogEntry: Identifiable {
 
 private final class DebugLog: @unchecked Sendable {
     let handle: FileHandle
+    private let formatter = ISO8601DateFormatter()
 
     init?(path: String) {
         FileManager.default.createFile(atPath: path, contents: nil)
@@ -23,7 +24,7 @@ private final class DebugLog: @unchecked Sendable {
     }
 
     func write(_ msg: String, file: String, line: Int) {
-        let ts = ISO8601DateFormatter().string(from: Date())
+        let ts = formatter.string(from: Date())
         let fn = (file as NSString).lastPathComponent
         let entry = "[\(ts)] \(fn):\(line) \(msg)\n"
         if let data = entry.data(using: .utf8) {

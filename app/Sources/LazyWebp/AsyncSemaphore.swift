@@ -3,7 +3,7 @@ import Foundation
 actor AsyncSemaphore {
     private let limit: Int
     private var count: Int = 0
-    private var nextID: UInt64 = 0
+    private var nextWaiterID: UInt64 = 0
     private var waiters: [(id: UInt64, continuation: CheckedContinuation<Void, Never>)] = []
 
     init(limit: Int) {
@@ -15,8 +15,8 @@ actor AsyncSemaphore {
             count += 1
             return
         }
-        let id = nextID
-        nextID += 1
+        let id = nextWaiterID
+        nextWaiterID += 1
         await withTaskCancellationHandler {
             await withCheckedContinuation { continuation in
                 waiters.append((id: id, continuation: continuation))
