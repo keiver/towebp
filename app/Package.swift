@@ -3,12 +3,12 @@
 import PackageDescription
 
 let package = Package(
-    name: "ToWebP",
+    name: "LazyWebp",
     platforms: [.macOS(.v14)],
     targets: [
         .executableTarget(
-            name: "ToWebP",
-            path: "Sources/ToWebP"
+            name: "LazyWebp",
+            path: "Sources/LazyWebp"
         )
     ]
 )

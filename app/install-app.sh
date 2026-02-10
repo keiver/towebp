@@ -2,15 +2,16 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-APP_NAME="ToWebP"
-APP_PATH="/Applications/${APP_NAME}.app"
-BUNDLE_ID="com.keiver.towebp"
+APP_DISPLAY="Lazy Webp"
+BINARY_NAME="LazyWebp"
+APP_PATH="/Applications/${APP_DISPLAY}.app"
+BUNDLE_ID="dev.keiver.lazywebp"
 
-echo "Building ${APP_NAME} (release)..."
+echo "Building ${BINARY_NAME} (release)..."
 cd "$SCRIPT_DIR"
 swift build -c release
 
-BINARY="$SCRIPT_DIR/.build/release/${APP_NAME}"
+BINARY="$SCRIPT_DIR/.build/release/${BINARY_NAME}"
 if [ ! -f "$BINARY" ]; then
     echo "Error: Release binary not found at $BINARY" >&2
     exit 1
@@ -20,7 +21,13 @@ echo "Creating app bundle at ${APP_PATH}..."
 mkdir -p "${APP_PATH}/Contents/MacOS"
 mkdir -p "${APP_PATH}/Contents/Resources"
 
-cp "$BINARY" "${APP_PATH}/Contents/MacOS/${APP_NAME}"
+cp "$BINARY" "${APP_PATH}/Contents/MacOS/${BINARY_NAME}"
+
+# Copy app icon
+ICON_SRC="$SCRIPT_DIR/../assets/AppIcon.icns"
+if [ -f "$ICON_SRC" ]; then
+    cp "$ICON_SRC" "${APP_PATH}/Contents/Resources/AppIcon.icns"
+fi
 
 cat > "${APP_PATH}/Contents/Info.plist" << PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -28,13 +35,13 @@ cat > "${APP_PATH}/Contents/Info.plist" << PLIST
 <plist version="1.0">
 <dict>
     <key>CFBundleExecutable</key>
-    <string>${APP_NAME}</string>
+    <string>${BINARY_NAME}</string>
     <key>CFBundleIdentifier</key>
     <string>${BUNDLE_ID}</string>
     <key>CFBundleName</key>
-    <string>${APP_NAME}</string>
+    <string>${APP_DISPLAY}</string>
     <key>CFBundleDisplayName</key>
-    <string>ToWebP</string>
+    <string>${APP_DISPLAY}</string>
     <key>CFBundleVersion</key>
     <string>1.0</string>
     <key>CFBundleShortVersionString</key>
@@ -43,6 +50,8 @@ cat > "${APP_PATH}/Contents/Info.plist" << PLIST
     <string>APPL</string>
     <key>LSMinimumSystemVersion</key>
     <string>14.0</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
     <key>LSUIElement</key>
     <false/>
 </dict>
@@ -56,5 +65,5 @@ echo "Signing app bundle..."
 codesign --force --sign - "${APP_PATH}"
 
 echo ""
-echo "Done! ${APP_NAME} installed to ${APP_PATH}"
+echo "Done! ${APP_DISPLAY} installed to ${APP_PATH}"
 echo "You can now launch it from Applications or Spotlight."

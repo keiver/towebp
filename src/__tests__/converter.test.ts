@@ -95,12 +95,15 @@ describe("ImageConverter", () => {
       expect(result.processed).toBe(0);
     });
 
-    it("rejects non-image files", async () => {
+    it("skips non-image files", async () => {
       const inputPath = path.join(workDir, "readme.txt");
       await fs.writeFile(inputPath, "hello");
 
       const converter = new ImageConverter();
-      await expect(converter.run(inputPath)).rejects.toThrow("Not a supported image file");
+      const result = await converter.run(inputPath);
+      expect(result.totalFiles).toBe(1);
+      expect(result.skipped).toBe(1);
+      expect(result.processed).toBe(0);
     });
   });
 

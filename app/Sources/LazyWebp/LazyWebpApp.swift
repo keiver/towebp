@@ -2,19 +2,19 @@ import ServiceManagement
 import SwiftUI
 
 @main
-struct ToWebPApp: App {
+struct LazyWebpApp: App {
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
     @Environment(\.openWindow) private var openWindow
 
     var body: some Scene {
-        WindowGroup("Lazy webp", id: "main") {
+        WindowGroup("Lazy Webp", id: "main") {
             ContentView()
         }
         .windowResizability(.contentSize)
-        .defaultSize(width: 500, height: 600)
+        .defaultSize(width: 500, height: 650)
 
-        MenuBarExtra("Lazy webp", systemImage: "arrow.triangle.2.circlepath") {
-            Button("Open Lazy webp") {
+        MenuBarExtra("Lazy Webp", systemImage: "arrow.triangle.2.circlepath") {
+            Button("Open Lazy Webp") {
                 NSApp.activate(ignoringOtherApps: true)
                 openWindow(id: "main")
             }
@@ -109,7 +109,7 @@ struct ToWebPApp: App {
                     let alert = NSAlert()
                     if proc.terminationStatus == 0 {
                         alert.messageText = "Installed Successfully"
-                        alert.informativeText = "Lazy webp has been installed to /Applications/ToWebP.app"
+                        alert.informativeText = "Lazy Webp has been installed to /Applications/Lazy Webp.app"
                         alert.alertStyle = .informational
                     } else {
                         alert.messageText = "Installation Failed"

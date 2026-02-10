@@ -16,7 +16,6 @@ export class ImageConverter {
       quality: Math.max(1, Math.min(quality, 100)),
       maxConcurrent: Math.max(1, Math.min(os.cpus().length - 1, 4)),
       inputFormats: ["jpg", "jpeg", "png", "gif", "bmp", "tiff", "webp"],
-      tempDir: path.join(os.tmpdir(), "towebp"),
     };
 
     this.stats = {
@@ -47,53 +46,63 @@ export class ImageConverter {
   }
 
   async run(input: string, outputDir?: string, recursive = false): Promise<ConversionResult> {
-    this.resetStats();
-    const stat = await fs.stat(input);
-
-    if (stat.isFile()) {
-      return this.convertSingleFileEntry(input, outputDir);
-    } else if (stat.isDirectory()) {
-      return this.convertDirectory(input, outputDir, recursive);
-    } else {
-      throw new Error(`Input is neither a file nor a directory: ${input}`);
-    }
+    return this.runAll([input], outputDir, recursive);
   }
 
-  private async convertSingleFileEntry(inputPath: string, outputDir?: string): Promise<ConversionResult> {
+  async runAll(inputs: string[], outputDir?: string, recursive = false): Promise<ConversionResult> {
+    this.resetStats();
     this.stats.startTime = Date.now();
-
-    if (!isImageFile(inputPath)) {
-      throw new Error(`Not a supported image file: ${inputPath}`);
-    }
-
-    const outputPath = this.resolveOutputPath(inputPath, outputDir);
-
-    // Guard: skip .webp → .webp same-path conversion
-    if (path.resolve(inputPath) === path.resolve(outputPath)) {
-      console.warn(`Skipping: source and output are the same file: ${inputPath}`);
-      this.stats.skipped++;
-      this.stats.totalFiles = 1;
-      this.stats.endTime = Date.now();
-      return this.buildResult();
-    }
 
     if (outputDir) {
       await fs.mkdir(outputDir, { recursive: true });
     }
 
-    await fs.mkdir(this.config.tempDir, { recursive: true });
+    // Collect all tasks from files and directories
+    const tasks: ConversionTask[] = [];
+    for (const input of inputs) {
+      const stat = await fs.stat(input);
 
-    this.stats.totalFiles = 1;
-    await this.convertImage(inputPath, outputPath);
+      if (stat.isFile()) {
+        this.collectFileTask(input, outputDir, tasks);
+      } else if (stat.isDirectory()) {
+        await this.collectDirectoryTasks(input, outputDir, recursive, tasks);
+      } else {
+        throw new Error(`Input is neither a file nor a directory: ${input}`);
+      }
+    }
 
-    await this.cleanupTempFiles();
+    if (this.stats.totalFiles === 0) {
+      throw new Error("No valid image files found");
+    }
+
+    await this.processInBatches(tasks);
+
     this.stats.endTime = Date.now();
     return this.buildResult();
   }
 
-  private async convertDirectory(inputDir: string, outputDir?: string, recursive = false): Promise<ConversionResult> {
-    this.stats.startTime = Date.now();
+  private collectFileTask(inputPath: string, outputDir: string | undefined, tasks: ConversionTask[]): void {
+    if (!isImageFile(inputPath)) {
+      console.warn(`Skipping: not a supported image file: ${inputPath}`);
+      this.stats.totalFiles++;
+      this.stats.skipped++;
+      return;
+    }
 
+    const outputPath = this.resolveOutputPath(inputPath, outputDir);
+
+    if (path.resolve(inputPath) === path.resolve(outputPath)) {
+      console.warn(`Skipping: source and output are the same file: ${inputPath}`);
+      this.stats.totalFiles++;
+      this.stats.skipped++;
+      return;
+    }
+
+    this.stats.totalFiles++;
+    tasks.push({ inputPath, outputPath });
+  }
+
+  private async collectDirectoryTasks(inputDir: string, outputDir: string | undefined, recursive: boolean, tasks: ConversionTask[]): Promise<void> {
     const sameDir = !outputDir;
     const resolvedOutput = outputDir ?? inputDir;
 
@@ -101,51 +110,33 @@ export class ImageConverter {
       await this.validatePaths(inputDir, resolvedOutput);
     }
 
-    await fs.mkdir(this.config.tempDir, { recursive: true });
-
     const entries = recursive
       ? await fs.readdir(inputDir, { recursive: true })
       : await fs.readdir(inputDir);
 
     const imageFiles = (entries as string[]).filter((entry) => isImageFile(entry));
 
-    if (imageFiles.length === 0) {
-      throw new Error("No valid image files found in input directory");
-    }
-
-    this.stats.totalFiles = imageFiles.length;
-
-    // Bug fix #1: Build task descriptors, create promises lazily in processInBatches
-    const tasks: ConversionTask[] = imageFiles.map((file) => {
+    for (const file of imageFiles) {
       const inputPath = path.join(inputDir, file);
 
       let outputPath: string;
       if (sameDir) {
         outputPath = path.join(path.dirname(inputPath), `${path.parse(file).name}.webp`);
       } else {
-        // Mirror subdirectory structure in output dir
         const relDir = path.dirname(file);
         outputPath = path.join(resolvedOutput, relDir, `${path.parse(file).name}.webp`);
       }
 
-      return { inputPath, outputPath };
-    });
-
-    // Filter out same-path conversions (e.g., .webp sources in same-dir mode)
-    const filteredTasks = tasks.filter((task) => {
-      if (path.resolve(task.inputPath) === path.resolve(task.outputPath)) {
-        console.warn(`Skipping: source and output are the same file: ${task.inputPath}`);
+      if (path.resolve(inputPath) === path.resolve(outputPath)) {
+        console.warn(`Skipping: source and output are the same file: ${inputPath}`);
+        this.stats.totalFiles++;
         this.stats.skipped++;
-        return false;
+        continue;
       }
-      return true;
-    });
 
-    await this.processInBatches(filteredTasks);
-    await this.cleanupTempFiles();
-
-    this.stats.endTime = Date.now();
-    return this.buildResult();
+      this.stats.totalFiles++;
+      tasks.push({ inputPath, outputPath });
+    }
   }
 
   private resolveOutputPath(inputPath: string, outputDir?: string): string {
@@ -224,8 +215,8 @@ export class ImageConverter {
       const inputSize = (await fs.stat(inputPath)).size;
 
       tempOutput = path.join(
-        this.config.tempDir,
-        `${crypto.randomBytes(16).toString("hex")}.webp`
+        path.dirname(outputPath),
+        `.towebp-${crypto.randomBytes(8).toString("hex")}.webp`
       );
 
       // Ensure output directory exists (for recursive mode with subdirs)
@@ -311,19 +302,6 @@ export class ImageConverter {
     }
 
     return results;
-  }
-
-  private async cleanupTempFiles(): Promise<void> {
-    try {
-      const files = await fs.readdir(this.config.tempDir);
-      await Promise.all(
-        files.map((file) =>
-          fs.unlink(path.join(this.config.tempDir, file)).catch(() => {})
-        )
-      );
-    } catch {
-      // ignore
-    }
   }
 
   private buildResult(): ConversionResult {

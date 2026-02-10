@@ -9,14 +9,15 @@ const HELP = `
 towebp v${VERSION} — Convert images to WebP format
 
 Usage:
-  towebp <file>                     Convert file, output next to source
+  towebp <file...>                  Convert file(s), output next to source
   towebp <dir>                      Convert all images in dir, output next to sources
-  towebp <file-or-dir> <outputDir>  Convert to separate output directory
+  towebp -o <outputDir> <input...>  Convert to separate output directory
   towebp -q 80 <file>               Custom quality (default: 90)
   towebp -r <dir>                   Recursive subdirectory processing
 
 Options:
   -q, --quality <n>   WebP quality 1-100 (default: 90)
+  -o, --output <dir>  Output directory (default: next to source)
   -r, --recursive     Process subdirectories recursively
   -h, --help          Show this help message
   -v, --version       Show version number
@@ -27,14 +28,12 @@ Supported formats: jpg, jpeg, png, gif, bmp, tiff, webp
 function parseArgs(argv: string[]): ParsedArgs {
   const args = argv.slice(2);
   const result: ParsedArgs = {
-    input: "",
+    inputs: [],
     quality: 90,
     recursive: false,
     help: false,
     version: false,
   };
-
-  const positional: string[] = [];
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
@@ -70,20 +69,23 @@ function parseArgs(argv: string[]): ParsedArgs {
       continue;
     }
 
+    if (arg === "-o" || arg === "--output") {
+      const next = args[++i];
+      if (next === undefined) {
+        console.error("Error: --output requires a directory argument");
+        process.exit(1);
+      }
+      result.outputDir = next;
+      continue;
+    }
+
     if (arg.startsWith("-")) {
       console.error(`Error: unknown option: ${arg}`);
       console.error("Run towebp --help for usage");
       process.exit(1);
     }
 
-    positional.push(arg);
-  }
-
-  if (positional.length >= 1) {
-    result.input = positional[0];
-  }
-  if (positional.length >= 2) {
-    result.outputDir = positional[1];
+    result.inputs.push(arg);
   }
 
   return result;
@@ -102,14 +104,14 @@ async function main(): Promise<void> {
     return;
   }
 
-  if (!parsed.input) {
+  if (parsed.inputs.length === 0) {
     console.error("Error: no input file or directory specified");
     console.error("Run towebp --help for usage");
     process.exit(1);
   }
 
   const converter = new ImageConverter(parsed.quality);
-  const results = await converter.run(parsed.input, parsed.outputDir, parsed.recursive);
+  const results = await converter.runAll(parsed.inputs, parsed.outputDir, parsed.recursive);
 
   console.log("\nConversion completed:");
   console.log(`  Total files: ${results.totalFiles}`);
@@ -124,6 +126,7 @@ async function main(): Promise<void> {
   if (results.failed.length > 0) {
     console.log("\nFailed conversions:");
     results.failed.forEach((f) => console.log(`  - ${f.file}: ${f.error}`));
+    process.exit(1);
   }
 }
 
