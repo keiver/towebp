@@ -14,7 +14,7 @@ private final class DebugLog: @unchecked Sendable {
     private let formatter = ISO8601DateFormatter()
 
     init?(path: String) {
-        FileManager.default.createFile(atPath: path, contents: nil)
+        FileManager.default.createFile(atPath: path, contents: nil, attributes: [.posixPermissions: 0o600])
         guard let h = FileHandle(forWritingAtPath: path) else { return nil }
         self.handle = h
     }
@@ -55,7 +55,7 @@ final class ConversionRunner: @unchecked Sendable {
     // MARK: - Computed from files[]
 
     var doneCount: Int {
-        files.count { $0.status == .done || $0.status == .skipped || $0.status == .failed }
+        convertedCount + failedCount + skippedCount
     }
 
     var convertedCount: Int {
@@ -174,7 +174,12 @@ final class ConversionRunner: @unchecked Sendable {
 
                     group.addTask {
                         dlog("[\(i)] waiting on semaphore")
-                        await semaphore.wait()
+                        let acquired = await semaphore.wait()
+
+                        guard acquired else {
+                            dlog("[\(i)] cancelled while waiting")
+                            return
+                        }
                         dlog("[\(i)] acquired semaphore")
 
                         guard !Task.isCancelled else {
@@ -309,9 +314,10 @@ final class ConversionRunner: @unchecked Sendable {
         let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
         dlog("[\(index)] stderr read complete, \(stderrData.count) bytes")
 
-        if let stderrStr = String(data: stderrData, encoding: .utf8)?
-            .trimmingCharacters(in: .whitespacesAndNewlines), !stderrStr.isEmpty
-        {
+        let stderrStr = String(data: stderrData, encoding: .utf8)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+        if !stderrStr.isEmpty {
             dlog("[\(index)] stderr: \(stderrStr)")
             let entries = stderrStr
                 .components(separatedBy: .newlines)
@@ -325,13 +331,11 @@ final class ConversionRunner: @unchecked Sendable {
         }
 
         if proc.terminationStatus != 0 {
-            let stderrMsg = String(data: stderrData, encoding: .utf8)?
-                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            dlog("[\(index)] FAILED: exit \(proc.terminationStatus), stderr=\(stderrMsg)")
+            dlog("[\(index)] FAILED: exit \(proc.terminationStatus), stderr=\(stderrStr)")
             return SingleFileResult(
                 status: .failed,
                 resultSize: nil,
-                errorMessage: stderrMsg.isEmpty ? "Exit code \(proc.terminationStatus)" : stderrMsg
+                errorMessage: stderrStr.isEmpty ? "Exit code \(proc.terminationStatus)" : stderrStr
             )
         }
 

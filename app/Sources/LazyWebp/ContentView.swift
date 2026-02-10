@@ -314,7 +314,7 @@ struct ContentView: View {
                 Spacer()
 
                 if let orig = file.originalSize {
-                    Text(formatBytesStatic(orig))
+                    Text(formatBytes(orig))
                         .font(.caption.monospacedDigit())
                         .foregroundStyle(.secondary)
                 }
@@ -323,12 +323,12 @@ struct ContentView: View {
                     Image(systemName: "arrow.right")
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
-                    Text(formatBytesStatic(resultSize))
+                    Text(formatBytes(resultSize))
                         .font(.caption.monospacedDigit())
                         .foregroundStyle(.secondary)
 
                     if let savings = file.savings {
-                        savingsBadgeStatic(savings)
+                        savingsBadge(savings)
                     }
                 }
 
@@ -383,35 +383,6 @@ struct ContentView: View {
             }
         }
 
-        private func formatBytesStatic(_ bytes: Int64) -> String {
-            formatBytes(bytes)
-        }
-
-        private func savingsBadgeStatic(_ savings: Double) -> some View {
-            let percent = Int(savings * 100)
-            let color: Color = percent > 50 ? .green : (percent > 20 ? .blue : .gray)
-            return Text("-\(percent)%")
-                .font(.caption2.bold())
-                .monospacedDigit()
-                .padding(.horizontal, 6)
-                .padding(.vertical, 2)
-                .background(color.opacity(0.15), in: Capsule())
-                .foregroundStyle(color)
-        }
-    }
-
-    // MARK: - Helpers
-
-    private func savingsBadge(_ savings: Double) -> some View {
-        let percent = Int(savings * 100)
-        let color: Color = percent > 50 ? .green : (percent > 20 ? .blue : .gray)
-        return Text("-\(percent)%")
-            .font(.caption2.bold())
-            .monospacedDigit()
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .background(color.opacity(0.15), in: Capsule())
-            .foregroundStyle(color)
     }
 
     // MARK: - Actions
@@ -463,6 +434,26 @@ struct ContentView: View {
         runner.enumerateFiles(from: urls, recursive: true)
         runner.convert(quality: Int(quality))
     }
+}
+
+// MARK: - Shared View Helpers
+
+private func savingsBadgeColor(_ percent: Int) -> Color {
+    if percent > 50 { return .green }
+    if percent > 20 { return .blue }
+    return .gray
+}
+
+private func savingsBadge(_ savings: Double) -> some View {
+    let percent = Int(savings * 100)
+    let color = savingsBadgeColor(percent)
+    return Text("-\(percent)%")
+        .font(.caption2.bold())
+        .monospacedDigit()
+        .padding(.horizontal, 6)
+        .padding(.vertical, 2)
+        .background(color.opacity(0.15), in: Capsule())
+        .foregroundStyle(color)
 }
 
 // MARK: - Byte Formatting
