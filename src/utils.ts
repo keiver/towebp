@@ -1,5 +1,5 @@
 import path from "node:path";
-import fs from "node:fs";
+import fs from "node:fs/promises";
 
 const INPUT_FORMATS = ["jpg", "jpeg", "png", "gif", "bmp", "tiff", "webp"];
 
@@ -27,15 +27,14 @@ export function formatDuration(ms: number): string {
   return minutes > 0 ? `${minutes}m ${seconds % 60}s` : `${seconds}s`;
 }
 
-export function getDiskSpace(dir: string): Promise<{ available: number }> {
-  return new Promise((resolve) => {
-    const target = process.platform === "win32" ? path.parse(dir).root : dir;
-    fs.statfs(target, (err, stats) => {
-      if (err) {
-        resolve({ available: Infinity });
-        return; // Bug fix #3: return after resolve to prevent fallthrough
-      }
-      resolve({ available: stats.bavail * stats.bsize });
-    });
-  });
+export async function getDiskSpace(dir: string): Promise<{ available: number }> {
+  const target = process.platform === "win32" ? path.parse(dir).root : dir;
+  try {
+    const stats = await fs.statfs(target);
+    return { available: stats.bavail * stats.bsize };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.warn(`Warning: could not check disk space for ${dir}: ${message}`);
+    return { available: Infinity };
+  }
 }

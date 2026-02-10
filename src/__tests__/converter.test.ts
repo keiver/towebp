@@ -9,21 +9,18 @@ function tmpDir(): string {
   return path.join(os.tmpdir(), `towebp-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 }
 
-async function createTestPng(filePath: string, width = 10, height = 10): Promise<void> {
+async function createTestImage(
+  filePath: string,
+  format: "png" | "jpeg" = "png",
+  width = 10,
+  height = 10,
+): Promise<void> {
   await fs.mkdir(path.dirname(filePath), { recursive: true });
+  const background = format === "png" ? { r: 255, g: 0, b: 0 } : { r: 0, g: 255, b: 0 };
   await sharp({
-    create: { width, height, channels: 3, background: { r: 255, g: 0, b: 0 } },
+    create: { width, height, channels: 3, background },
   })
-    .png()
-    .toFile(filePath);
-}
-
-async function createTestJpg(filePath: string, width = 10, height = 10): Promise<void> {
-  await fs.mkdir(path.dirname(filePath), { recursive: true });
-  await sharp({
-    create: { width, height, channels: 3, background: { r: 0, g: 255, b: 0 } },
-  })
-    .jpeg()
+    .toFormat(format)
     .toFile(filePath);
 }
 
@@ -50,7 +47,7 @@ describe("ImageConverter", () => {
   describe("single file conversion", () => {
     it("converts a PNG to WebP next to the source", async () => {
       const inputPath = path.join(workDir, "test.png");
-      await createTestPng(inputPath);
+      await createTestImage(inputPath);
 
       const converter = new ImageConverter();
       const result = await converter.run(inputPath);
@@ -67,7 +64,7 @@ describe("ImageConverter", () => {
     it("converts a JPG to WebP in a separate output directory", async () => {
       const inputPath = path.join(workDir, "photo.jpg");
       const outDir = path.join(workDir, "out");
-      await createTestJpg(inputPath);
+      await createTestImage(inputPath, "jpeg");
 
       const converter = new ImageConverter();
       const result = await converter.run(inputPath, outDir);
@@ -109,8 +106,8 @@ describe("ImageConverter", () => {
 
   describe("directory conversion", () => {
     it("converts all images in a directory (same-dir output)", async () => {
-      await createTestPng(path.join(workDir, "a.png"));
-      await createTestJpg(path.join(workDir, "b.jpg"));
+      await createTestImage(path.join(workDir, "a.png"));
+      await createTestImage(path.join(workDir, "b.jpg"), "jpeg");
 
       const converter = new ImageConverter();
       const result = await converter.run(workDir);
@@ -125,7 +122,7 @@ describe("ImageConverter", () => {
     });
 
     it("converts directory to separate output directory", async () => {
-      await createTestPng(path.join(workDir, "c.png"));
+      await createTestImage(path.join(workDir, "c.png"));
       const outDir = path.join(workDir, "output");
 
       const converter = new ImageConverter();
@@ -137,7 +134,7 @@ describe("ImageConverter", () => {
     });
 
     it("skips unchanged files on second run", async () => {
-      await createTestPng(path.join(workDir, "d.png"));
+      await createTestImage(path.join(workDir, "d.png"));
       const outDir = path.join(workDir, "output");
 
       const converter1 = new ImageConverter();
@@ -161,8 +158,8 @@ describe("ImageConverter", () => {
 
   describe("recursive mode", () => {
     it("processes images in subdirectories", async () => {
-      await createTestPng(path.join(workDir, "top.png"));
-      await createTestPng(path.join(workDir, "sub", "nested.png"));
+      await createTestImage(path.join(workDir, "top.png"));
+      await createTestImage(path.join(workDir, "sub", "nested.png"));
 
       const converter = new ImageConverter();
       const result = await converter.run(workDir, undefined, true);
@@ -177,7 +174,7 @@ describe("ImageConverter", () => {
     });
 
     it("mirrors subdirectory structure in separate output", async () => {
-      await createTestPng(path.join(workDir, "a", "deep.png"));
+      await createTestImage(path.join(workDir, "a", "deep.png"));
       const outDir = path.join(workDir, "output");
 
       const converter = new ImageConverter();
@@ -237,7 +234,7 @@ describe("ImageConverter", () => {
       const result = await converter.run(workDir);
 
       expect(result.failed.length).toBe(1);
-      expect(result.failed[0].file).toBe("corrupt.png");
+      expect(result.failed[0].file).toBe(path.join(workDir, "corrupt.png"));
     });
   });
 });

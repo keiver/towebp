@@ -9,18 +9,41 @@ struct LogEntry: Identifiable {
 
 // MARK: - Debug File Logger
 
-private let debugLog: FileHandle? = {
-    let path = "/tmp/lazywebp.log"
-    FileManager.default.createFile(atPath: path, contents: nil)
-    return FileHandle(forWritingAtPath: path)
+private final class DebugLog: @unchecked Sendable {
+    let handle: FileHandle
+    private let formatter = ISO8601DateFormatter()
+
+    init?(path: String) {
+        FileManager.default.createFile(atPath: path, contents: nil, attributes: [.posixPermissions: 0o600])
+        guard let h = FileHandle(forWritingAtPath: path) else { return nil }
+        self.handle = h
+    }
+
+    deinit {
+        try? handle.close()
+    }
+
+    func write(_ msg: String, file: String, line: Int) {
+        let ts = formatter.string(from: Date())
+        let fn = (file as NSString).lastPathComponent
+        let entry = "[\(ts)] \(fn):\(line) \(msg)\n"
+        if let data = entry.data(using: .utf8) {
+            handle.seekToEndOfFile()
+            handle.write(data)
+        }
+    }
+}
+
+private let debugLog: DebugLog? = {
+    let logDir = FileManager.default.homeDirectoryForCurrentUser
+        .appendingPathComponent("Library/Logs/LazyWebp")
+        .path
+    try? FileManager.default.createDirectory(atPath: logDir, withIntermediateDirectories: true)
+    return DebugLog(path: "\(logDir)/debug.log")
 }()
 
 private func dlog(_ msg: String, file: String = #file, line: Int = #line) {
-    let ts = ISO8601DateFormatter().string(from: Date())
-    let fn = (file as NSString).lastPathComponent
-    let entry = "[\(ts)] \(fn):\(line) \(msg)\n"
-    debugLog?.seekToEndOfFile()
-    debugLog?.write(entry.data(using: .utf8)!)
+    debugLog?.write(msg, file: file, line: line)
 }
 
 @Observable
@@ -38,7 +61,7 @@ final class ConversionRunner: @unchecked Sendable {
     // MARK: - Computed from files[]
 
     var doneCount: Int {
-        files.count { $0.status == .done || $0.status == .skipped || $0.status == .failed }
+        convertedCount + failedCount + skippedCount
     }
 
     var convertedCount: Int {
@@ -157,7 +180,12 @@ final class ConversionRunner: @unchecked Sendable {
 
                     group.addTask {
                         dlog("[\(i)] waiting on semaphore")
-                        await semaphore.wait()
+                        let acquired = await semaphore.wait()
+
+                        guard acquired else {
+                            dlog("[\(i)] cancelled while waiting")
+                            return
+                        }
                         dlog("[\(i)] acquired semaphore")
 
                         guard !Task.isCancelled else {
@@ -292,9 +320,10 @@ final class ConversionRunner: @unchecked Sendable {
         let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
         dlog("[\(index)] stderr read complete, \(stderrData.count) bytes")
 
-        if let stderrStr = String(data: stderrData, encoding: .utf8)?
-            .trimmingCharacters(in: .whitespacesAndNewlines), !stderrStr.isEmpty
-        {
+        let stderrStr = String(data: stderrData, encoding: .utf8)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+        if !stderrStr.isEmpty {
             dlog("[\(index)] stderr: \(stderrStr)")
             let entries = stderrStr
                 .components(separatedBy: .newlines)
@@ -308,13 +337,11 @@ final class ConversionRunner: @unchecked Sendable {
         }
 
         if proc.terminationStatus != 0 {
-            let stderrMsg = String(data: stderrData, encoding: .utf8)?
-                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            dlog("[\(index)] FAILED: exit \(proc.terminationStatus), stderr=\(stderrMsg)")
+            dlog("[\(index)] FAILED: exit \(proc.terminationStatus), stderr=\(stderrStr)")
             return SingleFileResult(
                 status: .failed,
                 resultSize: nil,
-                errorMessage: stderrMsg.isEmpty ? "Exit code \(proc.terminationStatus)" : stderrMsg
+                errorMessage: stderrStr.isEmpty ? "Exit code \(proc.terminationStatus)" : stderrStr
             )
         }
 

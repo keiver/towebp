@@ -1,7 +1,6 @@
 export interface ConversionConfig {
   quality: number;
   maxConcurrent: number;
-  inputFormats: string[];
 }
 
 export interface ConversionStats {

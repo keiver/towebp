@@ -15,7 +15,6 @@ export class ImageConverter {
     this.config = {
       quality: Math.max(1, Math.min(quality, 100)),
       maxConcurrent: Math.max(1, Math.min(os.cpus().length - 1, 4)),
-      inputFormats: ["jpg", "jpeg", "png", "gif", "bmp", "tiff", "webp"],
     };
 
     this.stats = {
@@ -83,18 +82,13 @@ export class ImageConverter {
 
   private collectFileTask(inputPath: string, outputDir: string | undefined, tasks: ConversionTask[]): void {
     if (!isImageFile(inputPath)) {
-      console.warn(`Skipping: not a supported image file: ${inputPath}`);
-      this.stats.totalFiles++;
-      this.stats.skipped++;
+      this.skipFile(`Skipping: not a supported image file: ${inputPath}`);
       return;
     }
 
     const outputPath = this.resolveOutputPath(inputPath, outputDir);
 
-    if (path.resolve(inputPath) === path.resolve(outputPath)) {
-      console.warn(`Skipping: source and output are the same file: ${inputPath}`);
-      this.stats.totalFiles++;
-      this.stats.skipped++;
+    if (this.isSameFile(inputPath, outputPath)) {
       return;
     }
 
@@ -127,16 +121,27 @@ export class ImageConverter {
         outputPath = path.join(resolvedOutput, relDir, `${path.parse(file).name}.webp`);
       }
 
-      if (path.resolve(inputPath) === path.resolve(outputPath)) {
-        console.warn(`Skipping: source and output are the same file: ${inputPath}`);
-        this.stats.totalFiles++;
-        this.stats.skipped++;
+      if (this.isSameFile(inputPath, outputPath)) {
         continue;
       }
 
       this.stats.totalFiles++;
       tasks.push({ inputPath, outputPath });
     }
+  }
+
+  private skipFile(message: string): void {
+    console.warn(message);
+    this.stats.totalFiles++;
+    this.stats.skipped++;
+  }
+
+  private isSameFile(inputPath: string, outputPath: string): boolean {
+    if (path.resolve(inputPath) === path.resolve(outputPath)) {
+      this.skipFile(`Skipping: source and output are the same file: ${inputPath}`);
+      return true;
+    }
+    return false;
   }
 
   private resolveOutputPath(inputPath: string, outputDir?: string): string {
@@ -166,12 +171,12 @@ export class ImageConverter {
   }
 
   private async getDirectorySize(dir: string): Promise<number> {
-    const files = await fs.readdir(dir);
+    const files = await fs.readdir(dir, { recursive: true });
     const sizes = await Promise.all(
-      files.map(async (file) => {
+      (files as string[]).map(async (file) => {
         try {
           const stats = await fs.stat(path.join(dir, file));
-          return stats.size;
+          return stats.isFile() ? stats.size : 0;
         } catch {
           return 0;
         }
@@ -201,7 +206,6 @@ export class ImageConverter {
   }
 
   async convertImage(inputPath: string, outputPath: string): Promise<FileConversionResult> {
-    // Bug fix #2: Declare tempOutput before try so it's accessible in catch
     let tempOutput: string | undefined;
 
     try {
@@ -253,6 +257,16 @@ export class ImageConverter {
         throw new Error("Generated file is empty");
       }
 
+      // Guard against symlink at output path
+      try {
+        const outputLstat = await fs.lstat(outputPath);
+        if (outputLstat.isSymbolicLink()) {
+          throw new Error("Output path is a symbolic link — refusing to overwrite");
+        }
+      } catch (e) {
+        if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
+      }
+
       await fs.rename(tempOutput, outputPath);
 
       this.stats.processed++;
@@ -261,7 +275,6 @@ export class ImageConverter {
 
       return { success: true, skipped: false };
     } catch (err) {
-      // Bug fix #2: Guard with if (tempOutput) before cleanup
       if (tempOutput) {
         try {
           await fs.unlink(tempOutput);
@@ -272,14 +285,13 @@ export class ImageConverter {
 
       const message = err instanceof Error ? err.message : String(err);
       this.stats.failed.push({
-        file: path.basename(inputPath),
+        file: inputPath,
         error: message,
       });
       return { success: false, error: message };
     }
   }
 
-  // Bug fix #1: Accept task descriptors, create promises lazily inside the batch loop
   private async processInBatches(tasks: ConversionTask[]): Promise<FileConversionResult[]> {
     const results: FileConversionResult[] = [];
 

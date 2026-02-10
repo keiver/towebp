@@ -52,23 +52,17 @@ struct LazyWebpApp: App {
     }
 
     private func installToApplications() {
-        // Try to find install-app.sh by walking up from the executable
         let scriptName = "install-app.sh"
         var foundPath: String?
 
-        if let execURL = Bundle.main.executableURL {
-            var dir = execURL.deletingLastPathComponent()
-            for _ in 0..<6 {
-                let candidate = dir.appendingPathComponent(scriptName).path
-                if FileManager.default.fileExists(atPath: candidate) {
-                    foundPath = candidate
-                    break
-                }
-                dir = dir.deletingLastPathComponent()
-            }
+        // Check bundle resources first (production builds)
+        if let resourcePath = Bundle.main.resourceURL?.appendingPathComponent(scriptName).path,
+           FileManager.default.fileExists(atPath: resourcePath)
+        {
+            foundPath = resourcePath
         }
 
-        // Also check Bundle.main.bundleURL parent
+        // Fallback: check bundle parent directory (dev builds)
         if foundPath == nil {
             let bundleParent = Bundle.main.bundleURL
                 .deletingLastPathComponent()
@@ -100,9 +94,12 @@ struct LazyWebpApp: App {
 
             do {
                 try proc.run()
+
+                // Read pipe BEFORE waitUntilExit to avoid deadlock
+                // if script output exceeds the pipe buffer (~64KB)
+                let data = pipe.fileHandleForReading.readDataToEndOfFile()
                 proc.waitUntilExit()
 
-                let data = pipe.fileHandleForReading.readDataToEndOfFile()
                 let output = String(data: data, encoding: .utf8) ?? ""
 
                 await MainActor.run {
