@@ -34,7 +34,13 @@ private final class DebugLog: @unchecked Sendable {
     }
 }
 
-private let debugLog = DebugLog(path: "/tmp/lazywebp.log")
+private let debugLog: DebugLog? = {
+    let logDir = FileManager.default.homeDirectoryForCurrentUser
+        .appendingPathComponent("Library/Logs/LazyWebp")
+        .path
+    try? FileManager.default.createDirectory(atPath: logDir, withIntermediateDirectories: true)
+    return DebugLog(path: "\(logDir)/debug.log")
+}()
 
 private func dlog(_ msg: String, file: String = #file, line: Int = #line) {
     debugLog?.write(msg, file: file, line: line)

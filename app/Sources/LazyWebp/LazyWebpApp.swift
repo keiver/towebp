@@ -94,9 +94,12 @@ struct LazyWebpApp: App {
 
             do {
                 try proc.run()
+
+                // Read pipe BEFORE waitUntilExit to avoid deadlock
+                // if script output exceeds the pipe buffer (~64KB)
+                let data = pipe.fileHandleForReading.readDataToEndOfFile()
                 proc.waitUntilExit()
 
-                let data = pipe.fileHandleForReading.readDataToEndOfFile()
                 let output = String(data: data, encoding: .utf8) ?? ""
 
                 await MainActor.run {
