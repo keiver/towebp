@@ -10,7 +10,6 @@ struct ToWebPApp: App {
         WindowGroup("Lazy webp", id: "main") {
             ContentView()
         }
-        .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentSize)
         .defaultSize(width: 500, height: 600)
 

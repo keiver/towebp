@@ -4,7 +4,7 @@ import PackageDescription
 
 let package = Package(
     name: "ToWebP",
-    platforms: [.macOS(.v26)],
+    platforms: [.macOS(.v14)],
     targets: [
         .executableTarget(
             name: "ToWebP",

@@ -2,6 +2,55 @@ import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
+// MARK: - Glass / Material Compatibility
+
+struct GlassOrMaterial: ViewModifier {
+    let cornerRadius: CGFloat
+
+    func body(content: Content) -> some View {
+        if #available(macOS 26, *) {
+            content.glassEffect(.regular, in: .rect(cornerRadius: cornerRadius))
+        } else {
+            content.background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: cornerRadius))
+        }
+    }
+}
+
+struct GlassOrMaterialTinted: ViewModifier {
+    let cornerRadius: CGFloat
+    let tint: Color
+
+    func body(content: Content) -> some View {
+        if #available(macOS 26, *) {
+            content.glassEffect(.regular.tint(tint), in: .rect(cornerRadius: cornerRadius))
+        } else {
+            content
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: cornerRadius))
+                .overlay(RoundedRectangle(cornerRadius: cornerRadius).stroke(tint.opacity(0.3), lineWidth: 1))
+        }
+    }
+}
+
+struct ClearContainerBackground: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(macOS 15, *) {
+            content.containerBackground(.clear, for: .window)
+        } else {
+            content
+        }
+    }
+}
+
+extension View {
+    func glassOrMaterial(cornerRadius: CGFloat) -> some View {
+        modifier(GlassOrMaterial(cornerRadius: cornerRadius))
+    }
+
+    func glassOrMaterial(cornerRadius: CGFloat, tint: Color) -> some View {
+        modifier(GlassOrMaterialTinted(cornerRadius: cornerRadius, tint: tint))
+    }
+}
+
 private final class SendableURLs: @unchecked Sendable {
     private let lock = NSLock()
     private var urls: [URL] = []
@@ -11,15 +60,15 @@ private final class SendableURLs: @unchecked Sendable {
 }
 
 struct FloatingWindowSetter: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSView {
-        let view = NSView()
-        DispatchQueue.main.async {
-            view.window?.level = .floating
-            view.window?.backgroundColor = .clear
-            view.window?.isMovableByWindowBackground = true
+    final class JsonView: NSView {
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            guard let window else { return }
+            window.level = .floating
+            window.isMovableByWindowBackground = true
         }
-        return view
     }
+    func makeNSView(context: Context) -> NSView { JsonView() }
     func updateNSView(_ nsView: NSView, context: Context) {}
 }
 
@@ -63,8 +112,6 @@ struct ContentView: View {
         }
         .padding(20)
         .frame(minWidth: 460, minHeight: 500)
-        .glassEffect(.regular, in: .rect(cornerRadius: 12))
-        .containerBackground(.clear, for: .window)
         .background(FloatingWindowSetter())
     }
 
@@ -74,7 +121,7 @@ struct ContentView: View {
         ZStack {
             RoundedRectangle(cornerRadius: 12)
                 .fill(isDragOver ? Color.accentColor.opacity(0.08) : .clear)
-                .glassEffect(.regular, in: .rect(cornerRadius: 12))
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
 
             VStack(spacing: 8) {
                 Image(systemName: "arrow.down.doc")
@@ -97,14 +144,27 @@ struct ContentView: View {
     // MARK: - Open Button
 
     private var openButton: some View {
-        Button {
-            openPanel()
-        } label: {
-            Label("Open...", systemImage: "folder")
+        Group {
+            if #available(macOS 26, *) {
+                Button {
+                    openPanel()
+                } label: {
+                    Label("Open...", systemImage: "folder")
+                }
+                .buttonStyle(.glass)
+                .controlSize(.large)
+                .disabled(runner.isRunning)
+            } else {
+                Button {
+                    openPanel()
+                } label: {
+                    Label("Open...", systemImage: "folder")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+                .disabled(runner.isRunning)
+            }
         }
-        .buttonStyle(.glass)
-        .controlSize(.large)
-        .disabled(runner.isRunning)
     }
 
     // MARK: - Quality Slider
@@ -114,6 +174,7 @@ struct ContentView: View {
             Text("Quality")
                 .foregroundStyle(.secondary)
             Slider(value: $quality, in: 1...100, step: 1)
+                .tint(.accentColor)
                 .disabled(runner.isRunning)
             Text("\(Int(quality))")
                 .monospacedDigit()
@@ -155,7 +216,7 @@ struct ContentView: View {
             Spacer()
         }
         .padding(10)
-        .glassEffect(.regular.tint(.red), in: .rect(cornerRadius: 8))
+        .glassOrMaterial(cornerRadius: 8, tint: .red)
     }
 
     // MARK: - Results
@@ -179,7 +240,7 @@ struct ContentView: View {
             .font(.callout)
         }
         .padding(12)
-        .glassEffect(.regular, in: .rect(cornerRadius: 10))
+        .glassOrMaterial(cornerRadius: 10)
     }
 
     @ViewBuilder
@@ -216,7 +277,7 @@ struct ContentView: View {
                     .padding(8)
                 }
                 .frame(height: 150)
-                .glassEffect(.regular, in: .rect(cornerRadius: 8))
+                .glassOrMaterial(cornerRadius: 8)
                 .onChange(of: runner.logLines.count) {
                     if let last = runner.logLines.last {
                         proxy.scrollTo(last.id, anchor: .bottom)
