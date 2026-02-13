@@ -1,4 +1,9 @@
-# lazywebp - Lazy webp converter
+# lazywebp - image converter, CLI and macOS app
+
+[![npm version](https://img.shields.io/npm/v/lazywebp.svg)](https://www.npmjs.com/package/lazywebp)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Test Status](https://github.com/keiver/lazywebp/workflows/Test%20PR/badge.svg)](https://github.com/keiver/lazywebp/actions)
+
 
 <p align="center">
   <img src="assets/lazywebp-towebp-start.webp" alt="Lazy Webp — drop zone" width="420" />
