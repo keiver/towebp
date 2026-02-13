@@ -1,4 +1,4 @@
-# lazywebp - image converter, CLI and macOS app
+# lazywebp - image converter
 
 [![npm version](https://img.shields.io/npm/v/lazywebp.svg)](https://www.npmjs.com/package/lazywebp)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
